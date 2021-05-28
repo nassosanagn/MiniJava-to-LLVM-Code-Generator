@@ -8,7 +8,6 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.lang.reflect.Method;
 
-
 public class Main {
     public static void main(String[] args) throws Exception {
         if(args.length < 1){
@@ -34,7 +33,7 @@ public class Main {
 
                 /* Print offsets for this file => If there are no errors */
                 System.out.println("-------------------- Output -------------------- \n");
-                typeCheck.output();                        
+                //typeCheck.output();                        
                 typeCheck.deleteSymbolTables();
             }
         }
