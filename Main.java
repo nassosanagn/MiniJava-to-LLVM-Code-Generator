@@ -3,6 +3,9 @@ import visitor.*;
 
 import java.util.*;
 
+import java.io.FileWriter;  
+import java.io.IOException; 
+
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -17,25 +20,31 @@ public class Main {
 
         FileInputStream fis = null;
         try{
+
+            FileWriter myFile = new FileWriter("testFile.ll");
             for (int file = 0; file < args.length; file++){
 
                 fis = new FileInputStream(args[file]);
                 MiniJavaParser parser = new MiniJavaParser(fis);
-
+                
                 Goal root = parser.Goal();
                 System.out.println("\nFile: " + args[file] + "\n");
 
-                MyVisitor dataCollector  = new MyVisitor(false);   /* Call MyVisitor for the 1st time to create the Symbol Table List */      
-                MyVisitor typeCheck = new MyVisitor(true);         /* Call MyVisitor for the 2nd time to do the typechecking */
+                MyVisitor dataCollector  = new MyVisitor(false, myFile);        /* Call MyVisitor for the 1st time to create the Symbol Table List */      
+                MyVisitor typeCheck = new MyVisitor(true, myFile);         /* Call MyVisitor for the 2nd time to do the typechecking */
                 
                 root.accept(dataCollector, null);
                 root.accept(typeCheck, null);
 
+                dataCollector.printVTables();
+
                 /* Print offsets for this file => If there are no errors */
-                System.out.println("-------------------- Output -------------------- \n");
-                //typeCheck.output();                        
+                //System.out.println("-------------------- Output -------------------- \n");
+                //typeCheck.output();        
+                myFile.write("\tret i32 0\n}\n");                
                 typeCheck.deleteSymbolTables();
             }
+            myFile.close();
         }
         catch(ParseException ex){
             System.out.println(ex.getMessage());
@@ -370,12 +379,36 @@ class MyVisitor extends GJDepthFirst<String,String>{
     int currSymbolTable;                                             /* currSymbolTable = current ST index => We have a new Symbol table everytime we have a new ClassDeclaration */
     int currClass;                                                   /* currClass = current class index inside of this ST => We have a new Class in the classList everytime we have a new ClassExtendsDeclaration */
     boolean typeCheck;                                               /* If flag typecheck == true, it's the second time we call MyVisitor to check the variables */
+    int registerCounter = 0;
+    FileWriter myFile;
 
     /* Initialize MyVisitor variables */
-    public MyVisitor(boolean typeCheck){
+    public MyVisitor(boolean typeCheck, FileWriter myFile){
         this.typeCheck = typeCheck;
         this.currSymbolTable = 0;    
         this.currClass = 0;
+        this.myFile = myFile;
+    }
+
+    public int printVTables(){
+
+        /* For every symbol table */         
+        for (int i = 0; i < st.size(); i++){
+            for (int j = 0; j <  st.get(i).classList.size(); j++){
+
+                int numOfMethods = st.get(i).classList.get(j).funList.size();
+
+                // if (j > 0){
+                //     numOfMethods += 
+                // }
+                
+                System.out.println("@." + st.get(i).getClassName(j) + "_vtable = global [" + numOfMethods + " x i8*] [");
+            }
+
+        }
+
+        return 0;
+
     }
 
     /* Find the index of the Symbol Table that contains the class called "className" => Return -1 if it doesn't exist */
@@ -476,9 +509,43 @@ class MyVisitor extends GJDepthFirst<String,String>{
      */
     public String visit(MainClass n, String argu) throws Exception {
 
+        String classname = n.f1.accept(this,argu);
+
         if (!typeCheck){
 
-            String classname = n.f1.accept(this,argu);
+            myFile.write("@." + classname +"_vtable = global [0 x i8*] []\n\n");
+    
+            /* Declare */
+            myFile.write("declare i8* @calloc(i32, i32)\n");
+            myFile.write("declare i32 @printf(i8*, ...)\n");
+            myFile.write("declare void @exit(i32)\n\n");
+    
+            myFile.write("@_cint = constant [4 x i8] c\"%d\\0a\\00\"\n");
+            myFile.write("@_cOOB = constant [15 x i8] c\"Out of bounds\\0a\\00\"\n");
+            myFile.write("@_cNSZ = constant [15 x i8] c\"Negative size\\0a\\00\"\n\n");
+    
+            /* Define print_int function */
+            myFile.write("define void @print_int(i32 %i) {\n");
+            myFile.write("\t%_str = bitcast [4 x i8]* @_cint to i8*\n");
+            myFile.write("\tcall i32 (i8*, ...) @printf(i8* %_str, i32 %i)\n");
+            myFile.write("\tret void\n}\n");
+    
+            /* Define throw_oob function */
+            myFile.write("define void @throw_oob() {\n");
+            myFile.write("\t%_str = bitcast [15 x i8]* @_cOOB to i8*\n");
+            myFile.write("\tcall i32 (i8*, ...) @printf(i8* %_str)\n");
+            myFile.write("\tcall void @exit(i32 1)\n");
+            myFile.write("\tret void\n}\n\n");
+    
+            /* Define throw_nsz function */
+            myFile.write("define void @throw_nsz() {\n");
+            myFile.write("\t%_str = bitcast [15 x i8]* @_cNSZ to i8*\n");
+            myFile.write("\tcall i32 (i8*, ...) @printf(i8* %_str)\n");
+            myFile.write("\tcall void @exit(i32 1)\n");
+            myFile.write("\tret void\n}\n\n");
+    
+            /* Define main function */
+            myFile.write("define i32 @main() {\n");
             
             st.add(new SymbolTable(classname));                                     /* add a new Symbol Table */
             st.get(currSymbolTable).insertVarInClass(n.f11.accept(this,argu), "String[]", currClass);
@@ -488,6 +555,11 @@ class MyVisitor extends GJDepthFirst<String,String>{
                 VarDeclaration varDecl = (VarDeclaration) varDecls.elementAt(i);
                 String varId = varDecl.f1.accept(this,argu);
                 String varType = varDecl.f0.accept(this,argu);
+
+                /* Declare the variable */
+                if (varType.equals("int")){
+                    myFile.write("\t%" + varId + " = alloca i32\n");
+                }
 
                 /* Check if there is already a variable with the same name in the class */
                 if (st.get(currSymbolTable).classVarReDeclaration(varId, currClass) != null){
@@ -500,15 +572,18 @@ class MyVisitor extends GJDepthFirst<String,String>{
             }
             
         }else{      /* If it's time for typechecking */
+
         
-            NodeListOptional statDecls = n.f15;            /* Visit each statement */
-            for (int i = 0; i < statDecls.size(); ++i) {
+        NodeListOptional statDecls = n.f15;            /* Visit each statement */
+        for (int i = 0; i < statDecls.size(); ++i) {
                 Statement statDecl = (Statement) statDecls.elementAt(i);
                 statDecl.f0.accept(this,"main");
             }
+
         }
         
-        super.visit(n, argu);
+        //super.visit(n, argu);
+        //if(typeCheck)
         return "Main Class";
     }
 
@@ -558,8 +633,17 @@ class MyVisitor extends GJDepthFirst<String,String>{
                 /* Insert the class variables in this Symbol Table */
                 st.get(currSymbolTable).insertVarInClass(varId, varType, currClass);    
             }
+            //int numOfMethods = 0;
+            NodeListOptional methodDecls = n.f4;     
 
-            NodeListOptional methodDecls = n.f4;                                      
+            int numOfMethods = methodDecls.size();                                 
+            myFile.write("@." + className + "_vtable = global [" + numOfMethods + " x i8*] [");
+            if (numOfMethods == 0)
+                myFile.write("]\n");
+            else{
+                myFile.write("\n");
+            }
+
             for (int i = 0; i < methodDecls.size(); ++i){           /*  f4 Method Declarations */
 
                 MethodDeclaration methodDecl = (MethodDeclaration) methodDecls.elementAt(i);
@@ -584,7 +668,11 @@ class MyVisitor extends GJDepthFirst<String,String>{
                 }else
                     /* Insert this class method in this Symbol Table */
                     st.get(currSymbolTable).insertMethodInClass(methodName, methodsType, numOfArgs, currClass);    
+                    
+                //numOfMethods++;
             }
+                System.out.println("O ARITHMOS TON SINARTISEON EINAI: " + numOfMethods);
+
         }
 
         return super.visit(n, argu);
@@ -952,6 +1040,8 @@ class MyVisitor extends GJDepthFirst<String,String>{
                             System.exit(1);
                         }
 
+                        myFile.write("\tstore i32 " + temp[i] + ", i32* %" + identifier + "\n");
+
                     }else{
 
                         /* Ignore symbols and words like "this", "true", "false" */
@@ -967,10 +1057,10 @@ class MyVisitor extends GJDepthFirst<String,String>{
                             }
 
                             /* Check if idType and varType matches => or bad assignment */
-                            if (idType.equals(varType) == false){
-                                System.err.println("error: incompatible types: " + idType + " cannot be converted to " + varType);
-                                System.exit(1);
-                            }
+                            // if (idType.equals(varType) == false){
+                            //     System.err.println("error: incompatible types: " + idType + " cannot be converted to " + varType);
+                            //     System.exit(1);
+                            // }
                         }
                     }
                 }
@@ -1131,6 +1221,9 @@ class MyVisitor extends GJDepthFirst<String,String>{
                 System.err.println("error: in print statement: int required");
                 System.exit(1);
             }
+
+            myFile.write("\t%t" + registerCounter + " = load i32, i32* %" + varName + "\n");
+            myFile.write("\tcall void (i32) @print_int(i32 %t" + registerCounter + ")\n");
         }
         return "System.out.println(" + varName + ")";
     }
