@@ -34,14 +34,16 @@ public class Main {
                 MyVisitor typeCheck = new MyVisitor(true, myFile);         /* Call MyVisitor for the 2nd time to do the typechecking */
                 
                 root.accept(dataCollector, null);
-                root.accept(typeCheck, null);
 
+                dataCollector.createVTables();
                 dataCollector.printVTables();
+
+                root.accept(typeCheck, null);
+                
 
                 /* Print offsets for this file => If there are no errors */
                 //System.out.println("-------------------- Output -------------------- \n");
                 //typeCheck.output();        
-                myFile.write("\tret i32 0\n}\n");                
                 typeCheck.deleteSymbolTables();
             }
             myFile.close();
@@ -81,16 +83,47 @@ class Function{
     }
 }
 
-class Class{
+class VTFunction{
 
+    String className;
+    String funName;
+    String funType;                             /* The return type of the function */
+    int numOfArgs;                              /* Τhe number of arguments in the function */
+    Map<String,String> argsArray;               /* A map with function arguments as keys and argument types as values */
+    //Map<String,String> varArray;                /* A map with function variables as keys and variable types as values */
+
+    public VTFunction(String className, String funName, String funType, int numOfArgs){
+
+        this.className = className;
+        this.funName = funName;
+        this.funType = funType;
+        this.numOfArgs = numOfArgs;
+        this.argsArray = new LinkedHashMap<String,String>(); 
+        //this.varArray = new LinkedHashMap<String,String>(); 
+    }
+}
+
+
+class Class{
+    
     String className;
     Map <String,String> classVarArray;      /* A map with class variables as keys and variable types as values */          
     List <Function> funList;                /* A list with the class functions */
-
+    
     public Class(String className){
         this.className = className;
         this.classVarArray = new LinkedHashMap<String,String>();
         this.funList = new ArrayList<Function>();  
+    }
+}
+
+class VTable{
+    String className;
+    List<VTFunction> funList;
+
+    public VTable(String className){
+        this.className = className;
+        this.funList = new ArrayList<VTFunction>();  
     }
 }
 
@@ -373,6 +406,53 @@ class SymbolTable{
     }
 }
 
+class OffsetTable{
+
+    VTable vtable;
+    Map <String,Integer> variableOffsets;
+    int maxOffset;
+
+    public OffsetTable(String className, SymbolTable tempST, VTable tempVTable){
+        
+        this.vtable = tempVTable;
+        this.variableOffsets = new LinkedHashMap<String,Integer>();
+        int offset = 0;
+        int index = 0;
+      
+        
+        for (int i = 0; i < tempST.classList.size(); i++){
+
+            if (tempST.classList.get(i).className.equals(className)){
+                index = i;
+                break;
+            }
+        }
+
+        for (int j = index; j >= 0; j--){
+            
+            for (Map.Entry<String, String> entry : tempST.classList.get(j).classVarArray.entrySet()) {            /* For every variable in the class */
+    
+                if (entry.getValue().equals("String[]"))           /* Don't print the main's arguments type "String[]" */
+                    continue;
+                
+                this.variableOffsets.put(entry.getKey(),offset);
+                //System.out.println(tempClass.className + "." + entry.getKey() + " : " + offset);
+    
+                if (entry.getValue().equals("boolean"))     /* Booleans are stored in 1 byte */
+                    offset += 1;
+                else if (entry.getValue().equals("int"))        /* Ints are stored in 4 bytes */
+                    offset += 4;
+                else                                /* Pointers are stored in 8 bytes */
+                    offset +=8;
+            }
+        }
+
+        this.maxOffset = offset;
+        
+    }
+
+}
+
 class MyVisitor extends GJDepthFirst<String,String>{
 
     static List <SymbolTable> st = new ArrayList<SymbolTable>();     /* The list with the SymbolTables */
@@ -381,34 +461,152 @@ class MyVisitor extends GJDepthFirst<String,String>{
     boolean typeCheck;                                               /* If flag typecheck == true, it's the second time we call MyVisitor to check the variables */
     int registerCounter = 0;
     FileWriter myFile;
+    
+    static List <VTable> vt = new ArrayList<VTable>();     /* The list with the SymbolTables */
+    int currVTable;
 
     /* Initialize MyVisitor variables */
     public MyVisitor(boolean typeCheck, FileWriter myFile){
         this.typeCheck = typeCheck;
         this.currSymbolTable = 0;    
         this.currClass = 0;
+        this.currVTable = 0;
         this.myFile = myFile;
     }
 
-    public int printVTables(){
+    public int createVTables(){
 
-        /* For every symbol table */         
-        for (int i = 0; i < st.size(); i++){
-            for (int j = 0; j <  st.get(i).classList.size(); j++){
+        int vTablesCounter = 0;
+       
+        for (int i = 0; i < st.size(); i++){                        /* For every symbol table */  
+
+            for (int j = 0; j < st.get(i).classList.size(); j++){                      /* For every class in the symbol table */
+
+                vt.add(new VTable(st.get(i).classList.get(j).className));           /* Create a new VTable for each class */                            
 
                 int numOfMethods = st.get(i).classList.get(j).funList.size();
 
-                // if (j > 0){
-                //     numOfMethods += 
-                // }
+                String functionName;
+                String className;
                 
-                System.out.println("@." + st.get(i).getClassName(j) + "_vtable = global [" + numOfMethods + " x i8*] [");
+                for (int z = 0; z < numOfMethods; z++){                 /* For every method in the class */
+
+                    className    = st.get(i).classList.get(j).className;
+                    functionName = st.get(i).classList.get(j).funList.get(z).funName;
+                    String returnType   = st.get(i).classList.get(j).funList.get(z).funType;
+                    int numOfArgs       = st.get(i).classList.get(j).funList.get(z).numOfArgs;
+
+                    vt.get(vTablesCounter).funList.add(new VTFunction(className,functionName, returnType, numOfArgs));
+
+                    //(st.get(i).classList.get(j)).funList.add(new Function(functionName, returnType, numOfArgs));
+
+                    for (Map.Entry<String, String> entry : st.get(i).classList.get(j).funList.get(z).argsArray.entrySet()){
+                        vt.get(vTablesCounter).funList.get(z).argsArray.put(entry.getKey(), entry.getValue());
+                    }
+                }
+
+                if (j > 0){                 /* It's a class extension */ 
+                
+                    for (int k = 0; k <st.get(i).classList.get(j-1).funList.size(); k++){        /* For every function in parent class */
+                        
+                        //System.out.println("SEARCH FOR: " + st.get(i).classList.get(j-1).funList.get(k).funName);
+
+                        //System.out.println("O ARITHMOS TON SINARTISEON EINAI: " + st.get(i).classList.get(j).funList.size() + "KAI EINAI H " + st.get(i).classList.get(j).funList.get(0).funName);
+
+                        /* for every function in this class */
+
+                        boolean found = false;
+
+                        for (int l = 0; l < st.get(i).classList.get(j).funList.size(); l++){
+
+                            if (st.get(i).classList.get(j).funList.get(l).funName.equals(st.get(i).classList.get(j-1).funList.get(k).funName)){
+
+                               // System.out.println("BRETHIKE H SYNARTISI: " + st.get(i).classList.get(j).funList.get(l).funName);
+                                found = true;
+                            }
+                        }
+
+                        //int index = st.get(i).classList.get(j).funList.indexOf(st.get(i).classList.get(j-1).funList.get(k).funName);
+
+                        /* If function from parent class does not exist in this class => insert it */
+                        if (!found) {
+
+                            //System.out.println("NOT FOUND: " + st.get(i).classList.get(j-1).funList.get(k).funName);
+
+                            className           = st.get(i).classList.get(j-1).className;
+                            functionName        = st.get(i).classList.get(j-1).funList.get(k).funName;
+                            String returnType   = st.get(i).classList.get(j-1).funList.get(k).funType;
+                            int numOfArgs       = st.get(i).classList.get(j-1).funList.get(k).numOfArgs;
+                            vt.get(vTablesCounter).funList.add(new VTFunction(className,functionName, returnType, numOfArgs));
+
+                            for (Map.Entry<String, String> entry : st.get(i).classList.get(j-1).funList.get(k).argsArray.entrySet()){
+                                vt.get(vTablesCounter).funList.get(k).argsArray.put(entry.getKey(), entry.getValue());
+                            }
+
+                        }
+                    }
+                }
+
+
+            vTablesCounter++;
             }
 
         }
 
         return 0;
+    }
 
+    public int printVTables() throws IOException {
+
+        for (int i = 0; i < vt.size(); i++){
+
+            int numOfFunctions = vt.get(i).funList.size();
+
+            myFile.write("@." + vt.get(i).className + "_vtable = global [" + numOfFunctions + " x i8*] [");
+          
+            if (numOfFunctions == 0){
+                myFile.write("]\n\n");
+            
+            }else{
+
+                for (int j = 0; j < numOfFunctions; j++){
+
+                    myFile.write("\n\ti8* bitcast (");
+
+                    if (vt.get(i).funList.get(j).funType.equals("int"))
+                        myFile.write("i32");
+                    else if (vt.get(i).funList.get(j).funType.equals("boolean"))
+                        myFile.write("i1");
+                    else
+                        myFile.write("i8*");
+
+                    myFile.write(" (i8*");
+
+                    for (Map.Entry<String, String> entry : vt.get(i).funList.get(j).argsArray.entrySet()){
+                        
+                        if (entry.getValue().equals("int"))
+                            myFile.write(",i32");
+                        else if (entry.getValue().equals("boolean"))
+                            myFile.write(",i1");
+                        else
+                            myFile.write(",i8*");
+                    }
+
+                    myFile.write(")*");
+                    myFile.write(" @" + vt.get(i).funList.get(j).className + "." + vt.get(i).funList.get(j).funName + " to i8*)");
+
+                    if (j == numOfFunctions - 1){
+                        myFile.write("\n]\n\n");
+                    }else{
+                        myFile.write(",");
+                    }
+
+                }
+            }
+        
+        }
+
+        return 0;
     }
 
     /* Find the index of the Symbol Table that contains the class called "className" => Return -1 if it doesn't exist */
@@ -513,77 +711,89 @@ class MyVisitor extends GJDepthFirst<String,String>{
 
         if (!typeCheck){
 
-            myFile.write("@." + classname +"_vtable = global [0 x i8*] []\n\n");
+            //myFile.write("@." + classname +"_vtable = global [0 x i8*] []\n\n");
     
             /* Declare */
-            myFile.write("declare i8* @calloc(i32, i32)\n");
-            myFile.write("declare i32 @printf(i8*, ...)\n");
-            myFile.write("declare void @exit(i32)\n\n");
-    
-            myFile.write("@_cint = constant [4 x i8] c\"%d\\0a\\00\"\n");
-            myFile.write("@_cOOB = constant [15 x i8] c\"Out of bounds\\0a\\00\"\n");
-            myFile.write("@_cNSZ = constant [15 x i8] c\"Negative size\\0a\\00\"\n\n");
-    
-            /* Define print_int function */
-            myFile.write("define void @print_int(i32 %i) {\n");
-            myFile.write("\t%_str = bitcast [4 x i8]* @_cint to i8*\n");
-            myFile.write("\tcall i32 (i8*, ...) @printf(i8* %_str, i32 %i)\n");
-            myFile.write("\tret void\n}\n");
-    
-            /* Define throw_oob function */
-            myFile.write("define void @throw_oob() {\n");
-            myFile.write("\t%_str = bitcast [15 x i8]* @_cOOB to i8*\n");
-            myFile.write("\tcall i32 (i8*, ...) @printf(i8* %_str)\n");
-            myFile.write("\tcall void @exit(i32 1)\n");
-            myFile.write("\tret void\n}\n\n");
-    
-            /* Define throw_nsz function */
-            myFile.write("define void @throw_nsz() {\n");
-            myFile.write("\t%_str = bitcast [15 x i8]* @_cNSZ to i8*\n");
-            myFile.write("\tcall i32 (i8*, ...) @printf(i8* %_str)\n");
-            myFile.write("\tcall void @exit(i32 1)\n");
-            myFile.write("\tret void\n}\n\n");
-    
-            /* Define main function */
-            myFile.write("define i32 @main() {\n");
             
             st.add(new SymbolTable(classname));                                     /* add a new Symbol Table */
             st.get(currSymbolTable).insertVarInClass(n.f11.accept(this,argu), "String[]", currClass);
-
+            
             NodeListOptional varDecls = n.f14;             /* f14 VARIABLE DECLARATIONS */
             for (int i = 0; i < varDecls.size(); ++i) {
                 VarDeclaration varDecl = (VarDeclaration) varDecls.elementAt(i);
                 String varId = varDecl.f1.accept(this,argu);
                 String varType = varDecl.f0.accept(this,argu);
-
-                /* Declare the variable */
-                if (varType.equals("int")){
-                    myFile.write("\t%" + varId + " = alloca i32\n");
-                }
-
+                
                 /* Check if there is already a variable with the same name in the class */
                 if (st.get(currSymbolTable).classVarReDeclaration(varId, currClass) != null){
                     System.err.println("error: class variable: " + varId + " double declaration");
                     System.exit(1);
                 }
-
+                
                 /* Insert the class variables in this st */
                 st.get(currSymbolTable).insertVarInClass(varId, varType, currClass);
             }
             
         }else{      /* If it's time for typechecking */
 
+            myFile.write("declare i8* @calloc(i32, i32)\n");
+            myFile.write("declare i32 @printf(i8*, ...)\n");
+            myFile.write("declare void @exit(i32)\n\n");
+
+            myFile.write("@_cint = constant [4 x i8] c\"%d\\0a\\00\"\n");
+            myFile.write("@_cOOB = constant [15 x i8] c\"Out of bounds\\0a\\00\"\n");
+            myFile.write("@_cNSZ = constant [15 x i8] c\"Negative size\\0a\\00\"\n\n");
+
+            /* Define print_int function */
+            myFile.write("define void @print_int(i32 %i) {\n");
+            myFile.write("\t%_str = bitcast [4 x i8]* @_cint to i8*\n");
+            myFile.write("\tcall i32 (i8*, ...) @printf(i8* %_str, i32 %i)\n");
+            myFile.write("\tret void\n}\n\n");
+
+            /* Define throw_oob function */
+            myFile.write("define void @throw_oob() {\n");
+            myFile.write("\t%_str = bitcast [15 x i8]* @_cOOB to i8*\n");
+            myFile.write("\tcall i32 (i8*, ...) @printf(i8* %_str)\n");
+            myFile.write("\tcall void @exit(i32 1)\n");
+            myFile.write("\tret void\n}\n\n");
+
+            /* Define throw_nsz function */
+            myFile.write("define void @throw_nsz() {\n");
+            myFile.write("\t%_str = bitcast [15 x i8]* @_cNSZ to i8*\n");
+            myFile.write("\tcall i32 (i8*, ...) @printf(i8* %_str)\n");
+            myFile.write("\tcall void @exit(i32 1)\n");
+            myFile.write("\tret void\n}\n\n");
+
+            /* Define main function */
+            myFile.write("define i32 @main() {\n");
         
-        NodeListOptional statDecls = n.f15;            /* Visit each statement */
-        for (int i = 0; i < statDecls.size(); ++i) {
+            /* Main class variable declarations */
+            for (Map.Entry<String, String> entry : st.get(currSymbolTable).classList.get(currClass).classVarArray.entrySet()){
+                
+                if (entry.getValue().equals("String[]"))    /* Ignore main's default argument */
+                    continue;
+
+                if (entry.getValue().equals("int"))
+                    myFile.write("\t%" + entry.getKey() + " = alloca i32\n");
+                else if (entry.getValue().equals("boolean"))
+                    myFile.write("\t%" + entry.getKey() + " = alloca i1\n");
+                else
+                    myFile.write("\t%" + entry.getKey() + " = alloca i8*\n");
+            }
+
+
+
+            NodeListOptional statDecls = n.f15;            /* Visit each statement */
+            for (int i = 0; i < statDecls.size(); ++i) {
                 Statement statDecl = (Statement) statDecls.elementAt(i);
                 statDecl.f0.accept(this,"main");
             }
 
+            myFile.write("\n\tret i32 0\n");
+            myFile.write("}\n\n");
         }
         
         //super.visit(n, argu);
-        //if(typeCheck)
         return "Main Class";
     }
 
@@ -606,6 +816,7 @@ class MyVisitor extends GJDepthFirst<String,String>{
     public String visit(ClassDeclaration n, String argu) throws Exception {
 
         currSymbolTable++;                          /* Add a new symbol table for the new class declaration */
+        currVTable++;
         String className = n.f1.accept(this,argu);
 
         if (!typeCheck){
@@ -636,14 +847,6 @@ class MyVisitor extends GJDepthFirst<String,String>{
             //int numOfMethods = 0;
             NodeListOptional methodDecls = n.f4;     
 
-            int numOfMethods = methodDecls.size();                                 
-            myFile.write("@." + className + "_vtable = global [" + numOfMethods + " x i8*] [");
-            if (numOfMethods == 0)
-                myFile.write("]\n");
-            else{
-                myFile.write("\n");
-            }
-
             for (int i = 0; i < methodDecls.size(); ++i){           /*  f4 Method Declarations */
 
                 MethodDeclaration methodDecl = (MethodDeclaration) methodDecls.elementAt(i);
@@ -667,12 +870,8 @@ class MyVisitor extends GJDepthFirst<String,String>{
                     System.exit(1);
                 }else
                     /* Insert this class method in this Symbol Table */
-                    st.get(currSymbolTable).insertMethodInClass(methodName, methodsType, numOfArgs, currClass);    
-                    
-                //numOfMethods++;
+                    st.get(currSymbolTable).insertMethodInClass(methodName, methodsType, numOfArgs, currClass);                      
             }
-                System.out.println("O ARITHMOS TON SINARTISEON EINAI: " + numOfMethods);
-
         }
 
         return super.visit(n, argu);
@@ -691,6 +890,7 @@ class MyVisitor extends GJDepthFirst<String,String>{
     public String visit(ClassExtendsDeclaration n, String argu) throws Exception {
         
         currClass++;                                    /* Add a new class in the current Symbol Table */
+        currVTable++;
         String className = n.f1.accept(this,argu);
 
         if (!typeCheck){
@@ -858,11 +1058,48 @@ class MyVisitor extends GJDepthFirst<String,String>{
                 }
             }
 
+            //define i32 @TV.Start(i8* %this) 
+            myFile.write("define ");
+            
+            if (methodsType.equals("int"))
+                myFile.write("i32 ");
+            else if (methodsType.equals("boolean"))
+                myFile.write("i1 ");
+            else
+                myFile.write("i8* ");
+
+            myFile.write("@" + methodName + "(i8* %this");
+
+            String argumentList = n.f4.present() ? n.f4.accept(this,argu) : "";
+            String[] temp = argumentList.split(", |,");
+
+            for (int i = 0; i < temp.length ; i++){
+                String[] args = temp[i].split(" ");
+
+                for  (int j = 0; j < args.length - 1; j+=2){
+
+                    if (args[j].equals("int"))
+                        myFile.write(", i32 %." + args[j+1]);
+                    else if (args[j].equals("boolean"))
+                        myFile.write(", i1 %." + args[j+1]);
+                    else 
+                        myFile.write(", i8* %." + args[j+1]);
+
+                    //st.get(currSymbolTable).inserArguInMethod(methodName, args[j+1], args[j], currClass);       /* args[j+1] = arguName and args[j] = arguType */
+                }
+            }
+
+            myFile.write(") {\n");
+
+            
+
             NodeListOptional statDecls = n.f8;              /* Visit each statement */
             for (int i = 0; i < statDecls.size(); ++i) {
                 Statement statDecl = (Statement) statDecls.elementAt(i);
                 statDecl.f0.accept(this,methodName);
             }          
+
+            myFile.write("}\n\n");
         }
         
         return "MethodDeclaration";
@@ -1222,8 +1459,8 @@ class MyVisitor extends GJDepthFirst<String,String>{
                 System.exit(1);
             }
 
-            myFile.write("\t%t" + registerCounter + " = load i32, i32* %" + varName + "\n");
-            myFile.write("\tcall void (i32) @print_int(i32 %t" + registerCounter + ")\n");
+            // myFile.write("\t%t" + registerCounter + " = load i32, i32* %" + varName + "\n");
+            // myFile.write("\tcall void (i32) @print_int(i32 %t" + registerCounter + ")\n");
         }
         return "System.out.println(" + varName + ")";
     }
@@ -1653,6 +1890,18 @@ class MyVisitor extends GJDepthFirst<String,String>{
                 System.err.println("error: cannot find class: " + className);
                 System.exit(1);
             }
+
+            OffsetTable tempOffsetTable = new OffsetTable(className, st.get(stIndex),vt.get(currVTable));
+
+            System.out.println("TO MAX OFFSET EINAI: " + (tempOffsetTable.maxOffset + 8));
+
+            myFile.write("\t%t" + registerCounter++ + " = call i8* calloc(i32 1, i32 " + (tempOffsetTable.maxOffset + 8) + ")\n");
+            myFile.write("\t%t" + registerCounter + " = bitcast i8* %t" + (registerCounter-1) + " to i8***\n");
+            registerCounter++;
+            myFile.write("\t%t" + registerCounter + " = getelementptr [");
+            myFile.write(vt.get(currVTable).funList.size() + " x i8*], [" + vt.get(currVTable).funList.size() + " x i8*]* ");
+            myFile.write("@." + vt.get(currVTable).className + "_vtable, i32 0 , i32 0\n");
+
         }
 
         return "AllocationExpression" + className;
