@@ -472,9 +472,9 @@ class MyVisitor extends GJDepthFirst<String,String>{
     int currSymbolTable;                                             /* currSymbolTable = current ST index => We have a new Symbol table everytime we have a new ClassDeclaration */
     int currClass;                                                   /* currClass = current class index inside of this ST => We have a new Class in the classList everytime we have a new ClassExtendsDeclaration */
     boolean typeCheck;                                               /* If flag typecheck == true, it's the second time we call MyVisitor to check the variables */
-    int registerCounter = 0;
+    
     FileWriter myFile;
-
+    int registerCounter = 0;
     boolean mathFlag = false;
     
     static List <VTable> vt = new ArrayList<VTable>();     /* The list with the SymbolTables */
