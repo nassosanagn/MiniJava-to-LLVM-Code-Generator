@@ -1,14 +1,14 @@
-@.Derived_vtable = global [2 x i8*] [
-    i8* bitcast (i32 (i8*,i32)* @Derived.set to i8*),
-    i8* bitcast (i32 (i8*)* @Base.get to i8*)
-]
+@.Classes_vtable = global [0 x i8*] []
 
 @.Base_vtable = global [2 x i8*] [
     i8* bitcast (i32 (i8*,i32)* @Base.set to i8*),
     i8* bitcast (i32 (i8*)* @Base.get to i8*)
 ]
 
-@.Classes_vtable = global [0 x i8*] []
+@.Derived_vtable = global [2 x i8*] [
+    i8* bitcast (i32 (i8*,i32)* @Derived.set to i8*),
+    i8* bitcast (i32 (i8*)* @Base.get to i8*)
+]
 
 declare i8* @calloc(i32, i32)
 declare i32 @printf(i8*, ...)
