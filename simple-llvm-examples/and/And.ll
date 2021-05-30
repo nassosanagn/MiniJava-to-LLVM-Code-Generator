@@ -60,10 +60,11 @@ define i32 @main() {
     exp_res_3:
     %_2 = phi i1  [ 0, %exp_res_0 ], [ %_1, %exp_res_2 ]
     br i1 %_2, label %if_then_0, label %if_else_0
+    
     if_else_0:
     store i32 1, i32* %x
-
     br label %if_end_0
+
     if_then_0:
     store i32 0, i32* %x
 
