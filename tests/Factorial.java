@@ -1,25 +1,16 @@
 class Factorial{
     public static void main(String[] a){
-        System.out.println(5);
+        System.out.println(new Fac().ComputeFac(10));
     }
 }
 
-class A{
-    int i;
-    boolean flag;
-    int j;
-    public int foo() {return 1;}
-    public boolean fa() {return true;}
-    public int aa() {return 10;}
-}
-
-class B extends A{
-    A type;
-    int k;
-    int i;
-    boolean sd;
-    public int foo() { return 1;}
-    public boolean bla() {return true;}
-    public int aa() {return 10;}
-    public int asasa() {return 10;}
+class Fac {
+    public int ComputeFac(int num){
+        int num_aux ;
+        if (num < 1)
+            num_aux = 1 ;
+        else
+            num_aux = num * (this.ComputeFac(num-1)) ;
+        return num_aux ;
+    }
 }

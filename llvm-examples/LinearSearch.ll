@@ -124,6 +124,7 @@ loop1:
 		%_17 = getelementptr i8, i8* %this, i32 8
 		%_18 = bitcast i8* %_17 to i32**
 		%_19 = load i32*, i32** %_18
+		
 		%_20 = load i32, i32* %j
 		%_8 = load i32, i32 *%_19
 		%_9 = icmp ult i32 %_20, %_8
