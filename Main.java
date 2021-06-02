@@ -1375,9 +1375,9 @@ class MyVisitor extends GJDepthFirst<String,String>{
                 }
 
 
-            // }else if (expr.contains("*")){
+            }else if (expr.contains("*")){
 
-            //     myFile.write("\tMPAINEI EDWWW \n");
+                myFile.write("\tstore i32 %t" + (registerCounter-1) + ", i32* %" + identifier +"\n");
 
             }else if ((expr.contains("AllocationExpression"))){       /* If it's new class allocation e.g. new A() */
 
@@ -1906,7 +1906,7 @@ class MyVisitor extends GJDepthFirst<String,String>{
                     myFile.write("\t%t" + registerCounter++ + " = getelementptr i8, i8* %this, i32 " + (offset + 8) + "\n");    
                     myFile.write("\t%t" + registerCounter++ + " = bitcast i8* %t" + (registerCounter - 2) + " to i32*\n");
                     myFile.write("\t%t" + registerCounter++ + " = load i32, i32* %t" + (registerCounter -2) + "\n");
-                    myFile.write("\t%t" + registerCounter++ + " = icmp slt i32 %t" + (registerCounter - 5) + ", i32* %t" + (registerCounter - 2) + "\n");
+                    myFile.write("\t%t" + registerCounter++ + " = icmp slt i32 %t" + (registerCounter - 5) + ", %t" + (registerCounter - 2) + "\n");
                     
                 }else{
                     String iBits = this.iBits(varType);
@@ -1915,9 +1915,9 @@ class MyVisitor extends GJDepthFirst<String,String>{
                 
             }
 
-            if ((this.isNumeric(expr1) == false) && (this.isNumeric(expr2) == false)){
-                myFile.write("\t%t" + registerCounter++ + " = icmp slt i32 %t" + (registerCounter - 3) + ", %t" + (registerCounter - 2) +"\n");
-            }
+            // if ((this.isNumeric(expr1) == false) && (this.isNumeric(expr2) == false)){
+            //     myFile.write("\t%t" + registerCounter++ + " = icmp slt i32 %t" + (registerCounter - 3) + ", %t" + (registerCounter - 2) +"\n");
+            // }
         }
 
         return expr1 + " < " + expr2;
@@ -2015,6 +2015,7 @@ class MyVisitor extends GJDepthFirst<String,String>{
     */
     public String visit(TimesExpression n, String argu) throws Exception {
         String x = n.f0.accept(this,argu);
+        boolean xIsVar = false;
         
         if (typeCheck){
             
@@ -2028,15 +2029,28 @@ class MyVisitor extends GJDepthFirst<String,String>{
                 String iBits2 = this.iBits(varType);
 
                 myFile.write("\t%t" + registerCounter++ + " = load " + iBits2 + ", " + iBits2 + "* %" + x + "\n");
+                xIsVar = true;
             }
                 
             String y = n.f2.accept(this,argu);
-            System.out.println("to x einai: " + x + " kai to y einai: " + y);
+
+            /* If y is a variable => load y */
+            if ((y.contains("MessageSend") == false) && (y.contains("[") == false) && (this.isNumeric(y) == false)){
+                
+                String varType = st.get(currSymbolTable).lookup(y, argu, currClass);     
+                String iBits2 = this.iBits(varType);
+
+                myFile.write("\t%t" + registerCounter++ + " = load " + iBits2 + ", " + iBits2 + "* %" + y + "\n");
+                
+                if (this.isNumeric(x)){
+                    myFile.write("\t%t" + registerCounter++ + " = mul i32 " + x + ", %t" + (registerCounter - 2) +"\n");
+                }
+            
+            }
 
             /* If y is a number do the multiplication */
             if (this.isNumeric(y)){
                 myFile.write("\t%t" + registerCounter++ + " = mul i32 %t" + (registerCounter - 2) + ", " + y +"\n");
-                myFile.write("\t; Sto Times Expression BGAINEI \n");
                 return x + " * " + y;
             }
 
