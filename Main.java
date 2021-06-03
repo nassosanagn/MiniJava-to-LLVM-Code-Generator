@@ -1540,19 +1540,29 @@ class MyVisitor extends GJDepthFirst<String,String>{
 
             String arraysName = n.f0.accept(this,identifier);
             String index = n.f2.accept(this,identifier);
-            String expr = n.f5.accept(this,identifier);
             String arraysType = st.get(currSymbolTable).lookup(arraysName, identifier, currClass);
-
-            /* Identifier or "arraysName" must be type "int[]" */
-            if (arraysType.equals("int[]") == false){
-                System.err.println("error: in array assignment: array required");
-                System.exit(1);
+            
+            /* laod arrays name */
+            String arraysType2 = st.get(currSymbolTable).lookup2(arraysName,identifier, currClass, mainClassName);
+            
+            if (arraysType2 == null){
+                
+                OffsetTable tempOffsetTable = new OffsetTable(st.get(currSymbolTable).getClassName(currClass), st.get(currSymbolTable),vt.get(currVTable));
+                int offset = tempOffsetTable.variableOffsets.get(arraysName) + 8;
+                
+                myFile.write("\t%t" + registerCounter++ + " = getelementptr i8, i8* %this, i32 " + offset + "\n");
+                myFile.write("\t%t" + registerCounter++ + " = bitcast i8* %t" + (registerCounter - 2) + " to i32**\n");
+                myFile.write("\t%t" + registerCounter++ + " = load i32*, i32** %t" + (registerCounter - 2) + "\n");
+                
+            }else{
+                myFile.write("\t%t" + registerCounter++ + " = load i32*, i32** %" + arraysName + "\n");
             }
+            
+            String expr = n.f5.accept(this,identifier);
 
             /* Check the index => must be type int*/       
             if (isNumeric(index)){                       /* If index is a number */
 
-                myFile.write("\t%t" + registerCounter++ + " = load i32*, i32** %" + arraysName + "\n");
                 myFile.write("\t%t" + registerCounter++ + " = load i32, i32* %t" + (registerCounter-2) + "\n");
                 myFile.write("\t%t" + registerCounter++ + " = icmp sge i32 0, 0\n");
                 myFile.write("\t%t" + registerCounter++ + " = icmp slt i32 0, %t" + (registerCounter - 3) + "\n");
@@ -1573,19 +1583,16 @@ class MyVisitor extends GJDepthFirst<String,String>{
 
             }else{                                       /* If index is a variable => check variable's type */
 
-                String indexType = st.get(currSymbolTable).lookup(index, identifier, currClass);
-                
-                /* Check if variable called "index" exists in the Symbol Table */
-                if (indexType == null){   
-                    System.err.println("error: in array assignment: cannot find symbol: " + index);
-                    System.exit(1);
+                String indexType2 = st.get(currSymbolTable).lookup2(index, identifier, currClass,mainClassName);
+
+                if (indexType2 == null){
+
+
+                }else{
+                    myFile.write("\t%t" + registerCounter++ + " = load i32, i32* %" + expr + "\n");
                 }
                 
-                /* Ckeck if variable called "indexType" isn't type "int" */
-                if (indexType.equals("int") == false){       
-                    System.err.println("error: in array assignment index must be type int");
-                    System.exit(1);
-                }
+               
             }
 
             /* Check expression => must be type int */
@@ -1934,6 +1941,8 @@ class MyVisitor extends GJDepthFirst<String,String>{
         String expr2 = n.f2.accept(this,methodName);
 
         if (typeCheck){
+
+            myFile.write("\t; mmphke sto add\n");
 
             if (expr1.contains("ArrayLookup") && expr2.contains("ArrayLookup")){
                 System.out.println("PRAKSI METAKSI ARRAYS");

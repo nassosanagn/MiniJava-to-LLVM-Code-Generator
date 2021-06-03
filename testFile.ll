@@ -159,6 +159,7 @@ define i32 @LS.Print(i8* %this) {
 	oob_end_0:
 	;Array lookup sto print statement
 	call void (i32) @print_int(i32 %t13)
+	; mmphke sto add
 	%t14 = add i32 %t13, 1
 	%t15 = load i32, i32* %j
 	store i32 %t15, i32* %j
@@ -216,6 +217,7 @@ define i32 @LS.Search(i8* %this, i32 %.num) {
 	br label %oob_end_0
 
 	oob_end_0:
+	; mmphke sto add
 	%t14 = add i32 %t13, 1
 	%t15 = load i32, i32* %num
 	store i32 %t15, i32* %aux02
@@ -261,6 +263,7 @@ define i32 @LS.Search(i8* %this, i32 %.num) {
 	br label %if_end_0
 
 	if_end_0:
+	; mmphke sto add
 	%t24 = add i32 %t23, 1
 	%t25 = load i32, i32* %j
 	store i32 %t25, i32* %j
@@ -304,6 +307,7 @@ define i32 @LS.Init(i8* %this, i32 %.sz) {
 	store i32* %t5, i32** %t9
 
 	store i32 1, i32* %j
+	; mmphke sto add
 	%t10 = getelementptr i8, i8* %this, i32 16
 	%t11 = bitcast i8 %t*, 10to i32*
 	%t12 = load i32, i32* %11
@@ -334,16 +338,22 @@ define i32 @LS.Init(i8* %this, i32 %.sz) {
 
 	store i32 %t22, i32* %aux02
 
-	%t23 = add i32 %t22, 1
-	%t24 = load i32, i32* %j
-	store i32 %t24, i32* %j
+	%t23 = getelementptr i8, i8* %this, i32 8
+	%t24 = bitcast i8* %t23 to i32**
+	%t25 = load i32*, i32** %t24
+	; mmphke sto add
+	%t26 = load i32, i32* %aux01 + aux02
+	; mmphke sto add
+	%t27 = add i32 %t26, 1
+	%t28 = load i32, i32* %j
+	store i32 %t28, i32* %j
 
 
 	; MinusExpression
-	%t25 = load i32, i32* %k
-	%t26 = sub i32 %t25, 1
+	%t29 = load i32, i32* %k
+	%t30 = sub i32 %t29, 1
 
-	store i32 %t26, i32* %k
+	store i32 %t30, i32* %k
 
 	br label %loop0
 	loop2:
