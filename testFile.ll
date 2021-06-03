@@ -1,4 +1,8 @@
-@.Arrays_vtable = global [0 x i8*] []
+@.Factorial_vtable = global [0 x i8*] []
+
+@.Fac_vtable = global [1 x i8*] [
+	i8* bitcast (i32 (i8*,i32)* @Fac.ComputeFac to i8*)
+]
 
 declare i8* @calloc(i32, i32)
 declare i32 @printf(i8*, ...)
@@ -29,90 +33,62 @@ define void @throw_nsz() {
 }
 
 define i32 @main() {
-	%x = alloca i32*
 
-	%t0 = add i32 1, 2
-	%t1 = icmp sge i32 %t0, 1
-	br i1 %t1, label %nsz_ok_0, label %nsz_err_0
+	%t0 = call i8* @calloc(i32 1, i32 8)
+	%t1 = bitcast i8* %t0 to i8***
+	%t2 = getelementptr [1 x i8*], [1 x i8*]* @.Fac_vtable, i32 0 , i32 0
+	store i8** %t2, i8*** %t1
 
-	nsz_err_0:
-	call void @throw_nsz()
-	br label %nsz_ok_0
-
-	nsz_ok_0:
-	%t2 = call i8* @calloc(i32 %t0, i32 4)
-	%t3 = bitcast i8* %t2 to i32*
-	store i32 2, i32* %t3
-	store i32* %t3, i32** %x
-	%t4 = load i32*, i32** %x
-	%t5 = load i32, i32* %t4
-	%t6 = icmp sge i32 0, 0
-	%t7 = icmp slt i32 0, %t5
-	%t8 = and i1 %t6, %t7
-	br i1 %t8, label %oob_ok_0, label %oob_err_0
-
-	oob_err_0:
-	call void @throw_oob()
-	br label %oob_ok_0
-
-	oob_ok_0:
-	%t9 = add i32 1, 0
-	%t10 = getelementptr i32, i32* %t4, i32 %t9
-
-	store i32 1, i32* %t10
-	%t11 = load i32*, i32** %x
-	%t12 = load i32, i32* %t11
-	%t13 = icmp sge i32 0, 0
-	%t14 = icmp slt i32 0, %t12
-	%t15 = and i1 %t13, %t14
-	br i1 %t15, label %oob_ok_1, label %oob_err_1
-
-	oob_err_1:
-	call void @throw_oob()
-	br label %oob_ok_1
-
-	oob_ok_1:
-	%t16 = add i32 1, 1
-	%t17 = getelementptr i32, i32* %t11, i32 %t16
-
-	store i32 2, i32* %t17
-	; einai sto array look up: x
-	%t18 = load i32*, i32** %x
-	%t19 = load i32, i32* %t18
-	%t20 = icmp sge i32 0, 0
-	%t21 = icmp slt i32 0, %t19
-	%t22 = and i1 %t20, %t21
-	br i1 %t22, label %oob_ok_2, label %oob_err_2
-
-	oob_err_2:
-	call void @throw_oob()
-	br label %oob_ok_2
-
-	oob_ok_2:
-	%t23 = add i32 1, 0
-	%t24 = getelementptr i32, i32* %t18, i32 %t23
-	%t25 = load i32, i32* %t24
-
-	; einai sto array look up: x
-	%t26 = load i32*, i32** %x
-	%t27 = load i32, i32* %t26
-	%t28 = icmp sge i32 0, 0
-	%t29 = icmp slt i32 0, %t27
-	%t30 = and i1 %t28, %t29
-	br i1 %t30, label %oob_ok_3, label %oob_err_3
-
-	oob_err_3:
-	call void @throw_oob()
-	br label %oob_ok_3
-
-	oob_ok_3:
-	%t31 = add i32 1, 1
-	%t32 = getelementptr i32, i32* %t26, i32 %t31
-	%t33 = load i32, i32* %t32
-
-	; mmphke sto add
-	%t34 = add i32 %t25, %t33
-	call void (i32) @print_int(i32 %t34)
+	; Message send here 
+	%t3 = bitcast i8* %t0 to i8***
+	%t4 = load i8**, i8*** %t3
+	%t5 = getelementptr i8*, i8** %t4, i32 0
+	%t6 = load i8*, i8** %t5
+	%t7 = bitcast i8* %t6 to i32 (i8*,i32)*
+	%t8 = call i32 %t7(i8* %t0, i32 10)
+	call void (i32) @print_int(i32 %t8)
 	ret i32 0
+}
+
+define i32 @Fac.ComputeFac(i8* %this, i32 %.num) {
+	%num = alloca i32
+	store i32 %.num, i32* %num
+	%num_aux = alloca i32
+
+	; CompareExpression
+	%t0 = load i32, i32* %num
+	; stin arxh tou IfStatement
+	%t1 = icmp slt i32 %t0, 1
+	br i1 %t1, label %if_then_0, label %if_else_0
+
+	if_then_0:
+	store i32 1, i32* %num_aux
+	br label %if_end_0
+
+	if_else_0:
+	; Sto Times Expression 
+	%t2 = load i32, i32* %num
+
+	; Message send here 
+	%t3 = bitcast i8* %this to i8***
+	%t4 = load i8**, i8*** %t3
+	%t5 = getelementptr i8*, i8** %t4, i32 0
+	%t6 = load i8*, i8** %t5
+	%t7 = bitcast i8* %t6 to i32 (i8*,i32)*
+
+	; MinusExpression
+	; mpainei edwwww
+	%t8 = load i32, i32* %num
+	%t9 = sub i32 %t8, 1
+	%t10 = call i32 %t7(i8* %this, i32 %t9)
+	%t11 = mul i32 %t2, %t10
+	; Sto Times Expression BGAINEI 22222 
+	store i32 %t11, i32* %num_aux
+	br label %if_end_0
+
+	if_end_0:
+	%t12 = load i32, i32* %num_aux
+
+	ret i32 %t12
 }
 

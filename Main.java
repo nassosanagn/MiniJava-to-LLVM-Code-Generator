@@ -11,6 +11,8 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.lang.reflect.Method;
 
+// 158 sto testFile.ll kai 130 sto BubbleSort.ll
+
 public class Main {
     public static void main(String[] args) throws Exception {
         if(args.length < 1){
@@ -1881,29 +1883,31 @@ class MyVisitor extends GJDepthFirst<String,String>{
     */
     public String visit(CompareExpression n, String argu) throws Exception {
 
-        String expr1 = n.f0.accept(this,argu);
-        String expr2 = n.f2.accept(this,argu);
-        boolean flag = false;
-
+        
         if (typeCheck){
-
+            
+            String expr1 = n.f0.accept(this,argu);
+            boolean flag = false;
+            
             myFile.write("\n\t; CompareExpression\n");
             
             if (this.isNumeric(expr1)){
-
+                
             }else{
-
+                
                 String varType = st.get(currSymbolTable).lookup2(expr1, argu, currClass, mainClassName);
                 
                 if (varType == null){   /* then variable is in class fields => load */
-
+                    
                 }else{
                     String iBits = this.iBits(varType);
                     myFile.write("\t%t" + registerCounter++ + " = load " + iBits + ", " + iBits + "* %" + expr1 + "\n");
-
+                    
                 }
                 
             }
+            
+            String expr2 = n.f2.accept(this,argu);
             
             if (this.isNumeric(expr2)){
                 
@@ -1918,15 +1922,21 @@ class MyVisitor extends GJDepthFirst<String,String>{
                 
                 if (varType == null){       /* If the variable is in a class field */
 
-                    String className = st.get(currSymbolTable).getClassName(currClass);
-                    OffsetTable tempOffsetTable = new OffsetTable(className, st.get(currSymbolTable),vt.get(currVTable));
-                    int offset = tempOffsetTable.variableOffsets.get(expr2);
-        
-                    myFile.write("\t%t" + registerCounter++ + " = getelementptr i8, i8* %this, i32 " + (offset + 8) + "\n");    
-                    myFile.write("\t%t" + registerCounter++ + " = bitcast i8* %t" + (registerCounter - 2) + " to i32*\n");
-                    myFile.write("\t%t" + registerCounter++ + " = load i32, i32* %t" + (registerCounter -2) + "\n");
-                    myFile.write("\t%t" + registerCounter++ + " = icmp slt i32 %t" + (registerCounter - 5) + ", %t" + (registerCounter - 2) + "\n");
-                    
+                   if(expr2.contains("+")){
+
+                        myFile.write("\t%t" + registerCounter++ + " = icmp slt i32 %t" + (registerCounter - 4) + ", %t" + (registerCounter - 2) + "\n");
+
+                   }else{
+
+                       String className = st.get(currSymbolTable).getClassName(currClass);
+                       OffsetTable tempOffsetTable = new OffsetTable(className, st.get(currSymbolTable),vt.get(currVTable));
+                       int offset = tempOffsetTable.variableOffsets.get(expr2);
+           
+                       myFile.write("\t%t" + registerCounter++ + " = getelementptr i8, i8* %this, i32 " + (offset + 8) + "\n");    
+                       myFile.write("\t%t" + registerCounter++ + " = bitcast i8* %t" + (registerCounter - 2) + " to i32*\n");
+                       myFile.write("\t%t" + registerCounter++ + " = load i32, i32* %t" + (registerCounter -2) + "\n");
+                       myFile.write("\t%t" + registerCounter++ + " = icmp slt i32 %t" + (registerCounter - 5) + ", %t" + (registerCounter - 2) + "\n");
+                   }
                 }else{
                     String iBits = this.iBits(varType);
                     myFile.write("\t%t" + registerCounter++ + " = load " + iBits + ", " + iBits + "* %" + expr2 + "\n");
@@ -1938,9 +1948,9 @@ class MyVisitor extends GJDepthFirst<String,String>{
             if (flag){
                 myFile.write("\t%t" + registerCounter++ + " = icmp slt i32 %t" + (registerCounter - 3) + ", %t" + (registerCounter - 2) +"\n");
             }
+            return expr1 + " < " + expr2;
         }
-
-        return expr1 + " < " + expr2;
+        return " < ";
     }
 
     /**
@@ -2052,9 +2062,9 @@ class MyVisitor extends GJDepthFirst<String,String>{
     * f1 -> "-"
     * f2 -> PrimaryExpression()
     */
-    public String visit(MinusExpression n, String argu) throws Exception {
+    public String visit(MinusExpression n, String methodName) throws Exception {
         
-        String x = n.f0.accept(this,argu);
+        String x = n.f0.accept(this,methodName);
         
         if (typeCheck){
             
@@ -2062,21 +2072,45 @@ class MyVisitor extends GJDepthFirst<String,String>{
             mathFlag = true;
 
             /* If x is a variable => load x */
-            if ((x.contains("MessageSend") == false) && (x.contains("[") == false) && (this.isNumeric(x) == false)){
+            // if ((x.contains("MessageSend") == false) && (x.contains("[") == false) && (this.isNumeric(x) == false)){
                 
-                String varType = st.get(currSymbolTable).lookup(x, argu, currClass);     
-                String iBits2 = this.iBits(varType);
+            //     String varType = st.get(currSymbolTable).lookup(x, methodName, currClass);     
+            //     String iBits2 = this.iBits(varType);
 
-                myFile.write("\t%t" + registerCounter++ + " = load " + iBits2 + ", " + iBits2 + "* %" + x + "\n");
-            }
+            //     myFile.write("\t%t" + registerCounter++ + " = load " + iBits2 + ", " + iBits2 + "* %" + x + "\n");
+            // }
                 
-            String y = n.f2.accept(this,argu);
+            String y = n.f2.accept(this,methodName);
             System.out.println("to x einai: " + x + " kai to y einai: " + y);
 
             /* If y is a number do the substraction */
-            if (this.isNumeric(y)){
-                myFile.write("\t%t" + registerCounter++ + " = sub i32 %t" + (registerCounter - 2) + ", " + y +"\n\n");
-                return x + " - " + y;
+            // if (this.isNumeric(y)){
+            //     myFile.write("\t%t" + registerCounter++ + " = sub i32 %t" + (registerCounter - 2) + ", " + y +"\n\n");
+            //     return x + " - " + y;
+            // }
+
+            /* If the 1st expression is a variable and second expression is a number */
+            if ((this.isNumeric(x) == false) && (this.isNumeric(y))){
+
+                String exprType = st.get(currSymbolTable).lookup2(x, methodName, currClass, mainClassName);
+                if (exprType == null){
+
+                    String className = st.get(currSymbolTable).getClassName(currClass);
+                    OffsetTable tempOffsetTable = new OffsetTable(className, st.get(currSymbolTable),vt.get(currVTable));
+                    
+                    String exprType2 = st.get(currSymbolTable).lookup(x, methodName, currClass);
+                    String iBits = this.iBits(exprType2);
+
+                    myFile.write("\t%t" + registerCounter++ + " = getelementptr i8, i8* %this, " + iBits + " " + (tempOffsetTable.variableOffsets.get(x) + 8) + "\n");
+                    myFile.write("\t%t" + registerCounter++ + " = bitcast i8* %t" + (registerCounter - 2) + " to " + iBits + "*\n");
+                    myFile.write("\t%t" + registerCounter++ + " = load i32, i32* %t" + (registerCounter - 2) + "\n"); 
+                    myFile.write("\t%t" + registerCounter++ + " = sub i32 %t" + (registerCounter - 2) + ", " + y +"\n");
+            
+                }else{
+                    myFile.write("\t; mpainei edwwww\n");
+                    myFile.write("\t%t" + registerCounter++ + " = load i32, i32* %" + x + "\n");    
+                    myFile.write("\t%t" + registerCounter++ + " = sub i32 %t" + (registerCounter - 2) + ", " + y +"\n");
+                }            
             }
            
             
