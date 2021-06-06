@@ -116,6 +116,7 @@ define i1 @Element.Equal(i8* %this, i8* %.other) {
 	%_14 = load i8*, i8** %_13
 	%_15 = bitcast i8* %_14 to i1 (i8*,i32, i32)*
 	%_17 = load i32, i32* %aux01
+	
 	%_18 = getelementptr i8, i8* %this, i32 8
 	%_19 = bitcast i8* %_18 to i32*
 	%_20 = load i32, i32* %_19
