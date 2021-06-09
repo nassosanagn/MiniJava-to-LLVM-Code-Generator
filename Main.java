@@ -25,10 +25,14 @@ public class Main {
         FileInputStream fis = null;
         try{
 
-            FileWriter myFile = new FileWriter("testFile.ll");
             for (int file = 0; file < args.length; file++){
-
+                
                 fis = new FileInputStream(args[file]);
+
+                args[file] = args[file].replace(".java",".ll");
+                FileWriter myFile = new FileWriter(args[file]);
+                System.out.println("Output file: " + args[file]);
+                
                 MiniJavaParser parser = new MiniJavaParser(fis);
                 
                 Goal root = parser.Goal();
@@ -44,13 +48,10 @@ public class Main {
 
                 root.accept(secondRound, null);
                 
-
-                /* Print offsets for this file => If there are no errors */
-                //System.out.println("-------------------- Output -------------------- \n");
-                //secondRound.output();        
                 secondRound.deleteSymbolTables();
+                secondRound.deleteVTables();
+                myFile.close();
             }
-            myFile.close();
         }
         catch(ParseException ex){
             System.out.println(ex.getMessage());
@@ -87,6 +88,19 @@ class Function{
     }
 }
 
+class Class{
+    
+    String className;
+    Map <String,String> classVarArray;      /* A map with class variables as keys and variable types as values */          
+    List <Function> funList;                /* A list with the class functions */
+    
+    public Class(String className){
+        this.className = className;
+        this.classVarArray = new LinkedHashMap<String,String>();
+        this.funList = new ArrayList<Function>();  
+    }
+}
+
 class VTFunction{
 
     String className;
@@ -104,21 +118,6 @@ class VTFunction{
         this.numOfArgs = numOfArgs;
         this.offset = offset;
         this.argsArray = new LinkedHashMap<String,String>(); 
-        //this.varArray = new LinkedHashMap<String,String>(); 
-    }
-}
-
-
-class Class{
-    
-    String className;
-    Map <String,String> classVarArray;      /* A map with class variables as keys and variable types as values */          
-    List <Function> funList;                /* A list with the class functions */
-    
-    public Class(String className){
-        this.className = className;
-        this.classVarArray = new LinkedHashMap<String,String>();
-        this.funList = new ArrayList<Function>();  
     }
 }
 
@@ -453,9 +452,12 @@ class MyVisitor extends GJDepthFirst<String,String>{
     static List <SymbolTable> st = new ArrayList<SymbolTable>();     /* The list with the SymbolTables */
     int currSymbolTable;                                             /* currSymbolTable = current ST index => We have a new Symbol table everytime we have a new ClassDeclaration */
     int currClass;                                                   /* currClass = current class index inside of this ST => We have a new Class in the classList everytime we have a new ClassExtendsDeclaration */
-    boolean secondRound;                                               /* If flag typecheck == true, it's the second time we call MyVisitor to check the variables */
-    String mainClassName;
+    boolean secondRound;                                             /* If flag secondRound == true, it's the second time we call MyVisitor */
+    
+    static List <VTable> vt = new ArrayList<VTable>();              /* The list with the VTables */
+    int currVTable;
 
+    String mainClassName;
     FileWriter myFile;
     String prevFunType;
 
@@ -476,8 +478,6 @@ class MyVisitor extends GJDepthFirst<String,String>{
     int mathCounter = 0;
     ArrayList<Integer> registersArray = new ArrayList<Integer>();
     
-    static List <VTable> vt = new ArrayList<VTable>();     /* The list with the SymbolTables */
-    int currVTable;
 
     /* Initialize MyVisitor variables */
     public MyVisitor(boolean secondRound, FileWriter myFile){
@@ -568,12 +568,12 @@ class MyVisitor extends GJDepthFirst<String,String>{
 
             myFile.write("@." + vt.get(i).className + "_vtable = global [" + numOfFunctions + " x i8*] [");
           
-            if (numOfFunctions == 0){
+            if (numOfFunctions == 0){           /* If there are no functions */
                 myFile.write("]\n\n");
             
             }else{
 
-                for (int j = 0; j < numOfFunctions; j++){
+                for (int j = 0; j < numOfFunctions; j++){       /* For each function */
 
                     myFile.write("\n\ti8* bitcast (");
 
@@ -641,6 +641,11 @@ class MyVisitor extends GJDepthFirst<String,String>{
     /* Delete the list with the symbol tables */
     public void deleteSymbolTables(){
         st.clear();
+    }
+
+    /* Delete the list with the symbol tables */
+    public void deleteVTables(){
+        vt.clear();
     }
 
     /* Function to print the offsets for every symbol table */
@@ -1371,11 +1376,23 @@ class MyVisitor extends GJDepthFirst<String,String>{
             }else if (expr.contains("MessageSend ")){           /* If it's a message send */
 
                 String exprType = expr.replace("MessageSend ", "");
-
-                myFile.write("\t; Sto Assignment Statement \n");
                 String iBits = this.iBits(idType);
+                                
+                String idType2 = st.get(stIndex).lookup2(identifier, methodName,currClass, mainClassName);
+                
+                if (idType2 == null){
+                                    
+                    OffsetTable tempOffsetTable = new OffsetTable(st.get(stIndex).getClassName(currClass), st.get(stIndex),vt.get(currVTable));
+                    int offset = tempOffsetTable.variableOffsets.get(identifier) + 8;
 
-                myFile.write("\tstore " + iBits + " %t" + (registerCounter-1) + ", " + iBits + "* %" + identifier +"\n");
+                    myFile.write("\t%t" + registerCounter++ + " =  getelementptr i8, i8* %this, i32 " + offset + "\n");
+                    myFile.write("\t%t" + registerCounter++ + " = bitcast i8* %t" + (registerCounter - 2) + " to " + iBits + "*\n");
+                    myFile.write("\tstore " + iBits + " %t" + (registerCounter - 3) + ", " + iBits + "* %t" + (registerCounter - 1) + "\n\n");
+
+                }else{
+                    myFile.write("\tstore " + iBits + " %t" + (registerCounter-1) + ", " + iBits + "* %" + identifier +"\n");
+                }
+                
 
             }else{       /* If it's a variable, or a number or a PrimaryExpression e.g. x + 5 */
 
@@ -1435,38 +1452,20 @@ class MyVisitor extends GJDepthFirst<String,String>{
                                 type = st.get(stIndex).lookup2(identifier, methodName, currClass, mainClassName);
                             }
 
-                            //     if (type == null){          /* it's not in local variables use offset */
-                            //         String className = st.get(stIndex).getClassName(currClass);
-                            //         OffsetTable tempOffsetTable = new OffsetTable(className, st.get(stIndex),vt.get(currVTable));
-                            //         myFile.write("\t%t" + registerCounter++ + " = getelementptr i8, i8* %this, i32 " + (tempOffsetTable.variableOffsets.get(identifier) + 8) + "\n");
-                            //         myFile.write("\t%t" + registerCounter++ + " = bitcast i8* %t" + (registerCounter-2) + " to " + iBits + "*\n");
-                            //         myFile.write("\tstore " + iBits + " %t" + (registerCounter - 3) + ", "+ iBits + "* %t" + (registerCounter - 1) + "\n\n");
-                            //         break;
-                            //     }else{
-                            //         myFile.write("\tstore " + iBits + " %t" + (registerCounter-1) + ", " + iBits + "* %" + identifier + "\n\n");                               
-                            //         break;
-                            //     }
-                            // }
-
-                            /* NA DW AN YPARXEI KAI EXEI DILOTHEI MESA STI SINARTISI ALIWS AN EINAI SE PEDIO KLASHS GETELEMENTPTR */
-                            //for (int j = 0; j < st.get(currSymbolTable).classList.get(currClass).funList.size(); j++){
-                                
-                            //    if (st.get(currSymbolTable).classList.get(currClass).funList.get(j).funName.equals(methodName) ){
-                                    //String type = st.get(currSymbolTable).classList.get(currClass).funList.get(j).varArray.get(identifier);
-                                    
-                                    if (type == null){          /* it's not in local variables use offset */
-                                        String className = st.get(stIndex).getClassName(currClass);
-                                        OffsetTable tempOffsetTable = new OffsetTable(className, st.get(stIndex),vt.get(currVTable));
-                                        System.out.println("\n PSAXNE TO: " + identifier + " = " + expr + " sto classname: " + className + " sti methodo: " + methodName);
-                                        myFile.write("\t%t" + registerCounter++ + " = getelementptr i8, i8* %this, i32 " + (tempOffsetTable.variableOffsets.get(identifier) + 8) + "\n");
-                                        myFile.write("\t%t" + registerCounter++ + " = bitcast i8* %t" + (registerCounter-2) + " to " + iBits + "*\n");
-                                        myFile.write("\tstore " + iBits + " %t" + (registerCounter - 3) + ", "+ iBits + "* %t" + (registerCounter - 1) + "\n\n");
-                                        break;
-                                    }else{
-                                        myFile.write("\tstore " + iBits + " %t" + (registerCounter-1) + ", " + iBits + "* %" + identifier + "\n\n");
-                                        //myFile.write("\tstore " + iBits + " %t" + (registerCounter-1) + ", " + iBits + "* %" + identifier + "\n\n");
-                                        break;
-                                    }
+                            if (type == null){          /* it's not in local variables use offset */
+                                String className = st.get(stIndex).getClassName(currClass);
+                                OffsetTable tempOffsetTable = new OffsetTable(className, st.get(stIndex),vt.get(currVTable));
+                                System.out.println("\n PSAXNE TO: " + identifier + " = " + expr + " sto classname: " + className + " sti methodo: " + methodName);
+                                myFile.write("\t%t" + registerCounter++ + " = getelementptr i8, i8* %this, i32 " + (tempOffsetTable.variableOffsets.get(identifier) + 8) + "\n");
+                                myFile.write("\t%t" + registerCounter++ + " = bitcast i8* %t" + (registerCounter-2) + " to " + iBits + "*\n");
+                                myFile.write("\tstore " + iBits + " %t" + (registerCounter - 3) + ", "+ iBits + "* %t" + (registerCounter - 1) + "\n\n");
+                                break;
+                            }else{
+                                myFile.write("\t ; to brhkeeeeeee\n");
+                                myFile.write("\tstore " + iBits + " %t" + (registerCounter-1) + ", " + iBits + "* %" + identifier + "\n\n");
+                                //myFile.write("\tstore " + iBits + " %t" + (registerCounter-1) + ", " + iBits + "* %" + identifier + "\n\n");
+                                break;
+                            }
                                // }
                             //}                           
                         }
@@ -1516,8 +1515,6 @@ class MyVisitor extends GJDepthFirst<String,String>{
             }else{
                 myFile.write("\t%t" + registerCounter++ + " = load i32*, i32** %" + arraysName + "\n");
             }
-            
-            
             
             /* Check the index => must be type int*/       
             if (isNumeric(index)){                       /* If index is a number */
@@ -1600,8 +1597,6 @@ class MyVisitor extends GJDepthFirst<String,String>{
                 String exprType = expr.replace("MessageSend ","");
                 myFile.write("\t ; edw tha empaine to end \n");
 
-               
-
             }else{                                       /* If expr is a variable => check variable's type */
 
                 String exprType2 = st.get(currSymbolTable).lookup2(expr, identifier, currClass, mainClassName);
@@ -1620,8 +1615,6 @@ class MyVisitor extends GJDepthFirst<String,String>{
                 }
 
                 myFile.write("\t ; edw tha empaine to end1111111111 \n");
-                
-                
             }
         }
 
@@ -2506,9 +2499,29 @@ class MyVisitor extends GJDepthFirst<String,String>{
             /* FOR MESSAGE SEND */
             int receiverObject;
                         
-            if((!itsAllocarionExpr) && (!itsThisExpr) &&(!itsMessageSend)){
-                myFile.write("\t%t" + registerCounter++ + " = load i8*, i8** %" + prExpr + "\n");
+            if((!itsAllocarionExpr) && (!itsThisExpr) &&(!itsMessageSend)){     /* Then primary expr is a variable */
+                myFile.write("\t; edw mpainei to psaximo tou l\n");
+
+                String prExprType = st.get(currSymbolTable).lookup2(prExpr, methodName, currClass, mainClassName);
+                
+                if (prExprType == null) {    /* variable is in class fields */
+                    
+                    String prExprType2 = st.get(currSymbolTable).lookup(prExpr, methodName, currClass);
+                    String iBits = this.iBits(prExprType2);
+
+                    String currClassName = st.get(currSymbolTable).getClassName(currClass);
+                    OffsetTable tempOffsetTable2 = new OffsetTable(currClassName, st.get(currSymbolTable),vt.get(vtIndex));
+                    System.out.println("psaxe sto className: " + currClassName);
+
+                    myFile.write("\t%t" + registerCounter++ + " = getelementptr i8, i8* %this, i32 " + (tempOffsetTable2.variableOffsets.get(prExpr) + 8) + "\n");
+                    myFile.write("\t%t" + registerCounter++ + " = bitcast i8* %t" + (registerCounter - 2) + " to " + iBits + "*\n");
+                    myFile.write("\t%t" + registerCounter++ + " = load " + iBits + ", " + iBits + "* %t" + (registerCounter - 2) + "\n");
+                
+                }else{
+                    myFile.write("\t%t" + registerCounter++ + " = load i8*, i8** %" + prExpr + "\n");
+                }
                 receiverObject = registerCounter - 1;
+
             }else{
                 receiverObject = registerCounter - 3;
             }
@@ -2681,6 +2694,7 @@ class MyVisitor extends GJDepthFirst<String,String>{
                 }
 
                 if (args[x].contains("this")){
+                    myFile.write(", i8* %this");
                     continue;
                 }
 

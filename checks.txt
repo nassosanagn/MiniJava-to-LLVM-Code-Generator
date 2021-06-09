@@ -1,0 +1,4 @@
+
+test1: den douleuei ------  new class. new class
+test2: douleuei     ------  me ta and to short-circuiting
+test3: den douleuei ------  me ta vtables (perimenw na anebasei .ll sto piazza)
